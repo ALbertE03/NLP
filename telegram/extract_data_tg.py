@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class Scraper:
+class ScraperT:
     def __init__(self, group_username: str, api_id: str = None, api_hash: str = None, max_workers: int = 5):
         self.group_username = group_username
         if not api_hash or not api_id:
@@ -254,5 +254,5 @@ class Scraper:
 api_id = os.getenv("api_id")
 api_hash = os.getenv("api_hash")
 
-s = Scraper("teleSUR_tv", api_id=api_id, api_hash=api_hash, max_workers=8)
+s = ScraperT("teleSUR_tv", api_id=api_id, api_hash=api_hash, max_workers=8)
 asyncio.run(s.extract_group_sms(n=1, batch_size=50))
