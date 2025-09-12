@@ -66,10 +66,14 @@ class Scraper:
             soup = BeautifulSoup(response.content, 'html.parser')
             
             articles = soup.find_all('article')
+            metas = soup.find_all("meta", property=lambda x:x and x.startswith("article:tag"))
+
             
             content = {
                 'url': url,
                 'title': '',
+                'section': '',
+                'tags': [],
                 'articles': [],
                 'source_metadata': url_metadata 
             }
@@ -78,6 +82,16 @@ class Scraper:
             if title_tag:
                 content['title'] = title_tag.get_text().strip()
 
+            section_tag = soup.find('meta', {'property': 'article:section'})
+            if section_tag:
+                content['section'] = section_tag.get('content', '').strip()
+            
+            # Extract tags from meta tags
+            for meta in metas:
+                tag_content = meta.get('content', '').strip()
+                if tag_content:
+                    content['tags'].append(tag_content)
+            
             for i, article in enumerate(articles):
                 article_content = {
                     'article_number': i + 1,
@@ -85,6 +99,8 @@ class Scraper:
                     'html': str(article)
                 }
                 content['articles'].append(article_content)
+
+            
             
             return content
             
@@ -158,6 +174,8 @@ class Scraper:
                     'article_id': f"{i}_{j}",
                     'url': article_data['url'],
                     'title': article_data['title'],
+                    'section': article_data['section'],
+                    'tags': article_data['tags'],
                     'article_number': article['article_number'],
                     'original_json_file': metadata.get('json_file'),
                     'message_index': metadata.get('message_index'),
