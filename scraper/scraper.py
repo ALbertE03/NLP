@@ -67,14 +67,15 @@ class Scraper:
             
             articles = soup.find_all('article')
             metas = soup.find_all("meta", property=lambda x:x and x.startswith("article:tag"))
-
+            paragraphs = soup.find('div', class_="content-area__text__full")
             
             content = {
                 'url': url,
                 'title': '',
                 'section': '',
                 'tags': [],
-                'articles': [],
+                'text': '',
+                # 'articles': [],
                 'source_metadata': url_metadata 
             }
             
@@ -92,16 +93,24 @@ class Scraper:
                 if tag_content:
                     content['tags'].append(tag_content)
             
-            for i, article in enumerate(articles):
-                article_content = {
-                    'article_number': i + 1,
-                    'text': article.get_text().strip(),
-                    'html': str(article)
-                }
-                content['articles'].append(article_content)
+            # Extract p tags from paragraphs div, excluding 2nd and 3rd p tags
+            paragraph_texts = []
+            if paragraphs:
+                p_tags = paragraphs.find_all('p', recursive=False)
+                for i, p_tag in enumerate(p_tags):
+                    # Skip the second and third p tags (index 1 and 2)
+                    if not p_tag.attrs:
+                        paragraph_texts.append(p_tag.get_text().strip())
+            content['text'] = '\n'.join(paragraph_texts)
 
-            
-            
+            # for i, article in enumerate(articles):
+            #     article_content = {
+            #         'article_number': i + 1,
+            #         'text': article.get_text().strip(),
+            #         'html': str(article)
+            #     }
+            #     content['articles'].append(article_content)
+
             return content
             
         except requests.exceptions.RequestException as e:
@@ -138,7 +147,7 @@ class Scraper:
             
             article_data = self.scrape_article_content(url, url_data)
             
-            if article_data and article_data['articles']:
+            if article_data and article_data['text']:
                 scraped_data.append(article_data)
                 
                 safe_filename = re.sub(r'[^\w\-_.]', '_', urlparse(url).path.split('/')[-1])
@@ -154,7 +163,7 @@ class Scraper:
                 except Exception as e:
                     print(f"Error al guardar {output_file}: {e}")
             else:
-                print(f"No se encontraron artículos en: {url}")
+                print(f"No se encontró texto en: {url}")
             
             time.sleep(1)
 
@@ -169,26 +178,27 @@ class Scraper:
         index_data = []
         for i, article_data in enumerate(scraped_data):
             metadata = article_data.get('source_metadata', {})
-            for j, article in enumerate(article_data.get('articles', [])):
-                index_entry = {
-                    'article_id': f"{i}_{j}",
-                    'url': article_data['url'],
-                    'title': article_data['title'],
-                    'section': article_data['section'],
-                    'tags': article_data['tags'],
-                    'article_number': article['article_number'],
-                    'original_json_file': metadata.get('json_file'),
-                    'message_index': metadata.get('message_index'),
-                    'message_id': metadata.get('message_id'),
-                    'date': metadata.get('date'),
-                    'original_text': metadata.get('text'),
-                    'photo_path': metadata.get('photo_path'),
-                    'views': metadata.get('views'),
-                    'reactions': metadata.get('reactions'),
-                    'total_reactions': metadata.get('total_reactions')
-                }
-                index_data.append(index_entry)
-        
+            # for j, article in enumerate(article_data.get('articles', [])):
+            index_entry = {
+                'article_id': f"{i}",
+                'url': article_data['url'],
+                'title': article_data['title'],
+                'section': article_data['section'],
+                'tags': article_data['tags'],
+                'text': article_data['text'],
+                # 'article_number': article['article_number'],
+                'original_json_file': metadata.get('json_file'),
+                'message_index': metadata.get('message_index'),
+                'message_id': metadata.get('message_id'),
+                'date': metadata.get('date'),
+                'original_text': metadata.get('text'),
+                'photo_path': metadata.get('photo_path'),
+                'views': metadata.get('views'),
+                'reactions': metadata.get('reactions'),
+                'total_reactions': metadata.get('total_reactions')
+            }
+            index_data.append(index_entry)
+    
         index_file = os.path.join(output_dir, "articles_index.json")
         try:
             with open(index_file, 'w', encoding='utf-8') as f:

@@ -17,8 +17,9 @@ def main():
     print(f"Scraping completado. Se procesaron {len(scraped_data)} artículos.")
     print(f"Los archivos se guardaron en: {output_dir}")
     
-    total_articles = sum(len(data['articles']) for data in scraped_data)
-    print(f"Total de etiquetas <article> encontradas: {total_articles}")
+    # Count articles with text content
+    articles_with_text = sum(1 for data in scraped_data if data.get('text', '').strip())
+    print(f"Total de artículos con contenido de texto: {articles_with_text}")
 
 if __name__ == "__main__":
     main()
