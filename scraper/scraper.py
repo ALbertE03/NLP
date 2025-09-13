@@ -65,7 +65,6 @@ class Scraper:
             
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            articles = soup.find_all('article')
             metas = soup.find_all("meta", property=lambda x:x and x.startswith("article:tag"))
             paragraphs = soup.find('div', class_="content-area__text__full")
             
@@ -75,7 +74,6 @@ class Scraper:
                 'section': '',
                 'tags': [],
                 'text': '',
-                # 'articles': [],
                 'source_metadata': url_metadata 
             }
             
@@ -87,30 +85,24 @@ class Scraper:
             if section_tag:
                 content['section'] = section_tag.get('content', '').strip()
             
-            # Extract tags from meta tags
             for meta in metas:
                 tag_content = meta.get('content', '').strip()
                 if tag_content:
                     content['tags'].append(tag_content)
             
-            # Extract p tags from paragraphs div, excluding 2nd and 3rd p tags
             paragraph_texts = []
             if paragraphs:
                 p_tags = paragraphs.find_all('p', recursive=False)
                 for i, p_tag in enumerate(p_tags):
-                    # Skip the second and third p tags (index 1 and 2)
                     if not p_tag.attrs:
                         paragraph_texts.append(p_tag.get_text().strip())
-            content['text'] = '\n'.join(paragraph_texts)
+            text = '\n'.join(paragraph_texts)
+            
+            text = re.sub(r'\n*LEA TAMBIÉN:\n.*?(\n|$)', '\n', text)
 
-            # for i, article in enumerate(articles):
-            #     article_content = {
-            #         'article_number': i + 1,
-            #         'text': article.get_text().strip(),
-            #         'html': str(article)
-            #     }
-            #     content['articles'].append(article_content)
+            content['text'] = text
 
+        
             return content
             
         except requests.exceptions.RequestException as e:
@@ -253,68 +245,4 @@ class Scraper:
                 
         except Exception as e:
             print(f"Error al obtener mensaje original: {e}")
-            return None
-    
-    def export_to_csv(self, index_file_path, output_csv="articles_export.csv"):
-        """
-        Exporta el índice de artículos a un archivo CSV para análisis
-        """
-        try:
-            import csv
-            
-            with open(index_file_path, 'r', encoding='utf-8') as f:
-                index_data = json.load(f)
-            
-            with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
-                fieldnames = [
-                    'article_id', 'url', 'title', 'article_number',
-                    'message_id', 'date', 'views', 'total_reactions',
-                    'original_json_file', 'message_index', 'photo_path'
-                ]
-                
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                
-                for entry in index_data:
-                    row = {field: entry.get(field, '') for field in fieldnames}
-                    writer.writerow(row)
-            
-            print(f"Datos exportados a: {output_csv}")
-            return True
-            
-        except Exception as e:
-            print(f"Error al exportar a CSV: {e}")
-            return False
-    
-    def get_article_statistics(self, index_file_path):
-        """
-        Genera estadísticas sobre los artículos extraídos
-        """
-        try:
-            with open(index_file_path, 'r', encoding='utf-8') as f:
-                index_data = json.load(f)
-            
-            stats = {
-                'total_articles': len(index_data),
-                'unique_urls': len(set(entry['url'] for entry in index_data)),
-                'date_range': {
-                    'earliest': min(entry['date'] for entry in index_data if entry['date']),
-                    'latest': max(entry['date'] for entry in index_data if entry['date'])
-                },
-                'total_views': sum(entry.get('views', 0) for entry in index_data),
-                'total_reactions': sum(entry.get('total_reactions', 0) for entry in index_data),
-                'articles_by_json': {},
-                'articles_with_photos': sum(1 for entry in index_data if entry.get('photo_path'))
-            }
-            
-            for entry in index_data:
-                json_file = os.path.basename(entry.get('original_json_file', 'Unknown'))
-                if json_file not in stats['articles_by_json']:
-                    stats['articles_by_json'][json_file] = 0
-                stats['articles_by_json'][json_file] += 1
-            
-            return stats
-            
-        except Exception as e:
-            print(f"Error al generar estadísticas: {e}")
             return None

@@ -61,8 +61,8 @@ class ScraperT:
                                 total_reactions += reaction.count
                     
                     photo_path = None
-                    if message.photo:
-                        photo_path = await self.download_photo(message)
+                    #if message.photo:
+                     #   photo_path = await self.download_photo(message)
 
                     batch_data[year_month].append(
                         {
@@ -255,4 +255,4 @@ api_id = os.getenv("api_id")
 api_hash = os.getenv("api_hash")
 
 s = ScraperT("teleSUR_tv", api_id=api_id, api_hash=api_hash, max_workers=8)
-asyncio.run(s.extract_group_sms(n=1, batch_size=50))
+asyncio.run(s.extract_group_sms(extract_all=True, batch_size=50))
