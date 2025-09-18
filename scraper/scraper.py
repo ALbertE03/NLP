@@ -5,13 +5,17 @@ import re
 import json
 import time
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 class Scraper:
-    def __init__(self, data_path="Data/teleSUR_tv"):
+    def __init__(self, data_path="Data/teleSUR_tv", max_workers=5):
         self.data_path = data_path
+        self.max_workers = max_workers
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
+        self.lock = threading.Lock()
     
     def extract_urls_from_json(self, json_file_path):
         """
@@ -59,8 +63,10 @@ class Scraper:
         Hace scraping de una URL y extrae el contenido de las etiquetas <article>
         """
         try:
-            print(f"Haciendo scraping de: {url}")
-            response = requests.get(url, headers=self.headers, timeout=10)
+            with self.lock:
+                print(f"Haciendo scraping de: {url}")
+            
+            response = requests.get(url, headers=self.headers, timeout=15)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
@@ -102,19 +108,41 @@ class Scraper:
 
             content['text'] = text
 
-        
             return content
             
         except requests.exceptions.RequestException as e:
-            print(f"Error al hacer request a {url}: {e}")
+            with self.lock:
+                print(f"Error al hacer request a {url}: {e}")
             return None
         except Exception as e:
-            print(f"Error inesperado al procesar {url}: {e}")
+            with self.lock:
+                print(f"Error inesperado al procesar {url}: {e}")
             return None
+    
+    def process_single_url(self, url_data_with_index):
+        """
+        Procesa una sola URL con su metadata y índice para uso en concurrencia
+        """
+        url_data, index, total = url_data_with_index
+        url = url_data['url']
+        
+        with self.lock:
+            print(f"Procesando {index}/{total}: {url}")
+            print(f"  Origen: {url_data['json_file']} (mensaje #{url_data['message_index']})")
+        
+        article_data = self.scrape_article_content(url, url_data)
+        
+        if article_data and article_data['text']:
+            return article_data, url_data, index
+        else:
+            with self.lock:
+                print(f"No se encontró texto en: {url}")
+            return None, url_data, index
     
     def scrape_urls_from_data(self, json_file_path, output_dir="scraped_articles"):
         """
         Extrae URLs del JSON y hace scraping de cada una manteniendo referencias
+        Ahora usa procesamiento concurrente para mayor eficiencia
         """
         os.makedirs(output_dir, exist_ok=True)
         
@@ -129,48 +157,61 @@ class Scraper:
                 seen_urls.add(url_data['url'])
         
         print(f"URLs únicas de teleSUR: {len(telesur_urls_metadata)}")
+        print(f"Usando {self.max_workers} workers concurrentes")
         
         scraped_data = []
         
-        for i, url_data in enumerate(telesur_urls_metadata, 1):
-            url = url_data['url']
-            print(f"Procesando {i}/{len(telesur_urls_metadata)}: {url}")
-            print(f"  Origen: {url_data['json_file']} (mensaje #{url_data['message_index']})")
+        url_data_with_index = [
+            (url_data, i+1, len(telesur_urls_metadata)) 
+            for i, url_data in enumerate(telesur_urls_metadata)
+        ]
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_url = {
+                executor.submit(self.process_single_url, url_item): url_item[0]['url'] 
+                for url_item in url_data_with_index
+            }
             
-            article_data = self.scrape_article_content(url, url_data)
-            
-            if article_data and article_data['text']:
-                scraped_data.append(article_data)
-                
-                safe_filename = re.sub(r'[^\w\-_.]', '_', urlparse(url).path.split('/')[-1])
-                if not safe_filename:
-                    safe_filename = f"article_{i}"
-                    
-                output_file = os.path.join(output_dir, f"{safe_filename}.json")
-                
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
                 try:
-                    with open(output_file, 'w', encoding='utf-8') as f:
-                        json.dump(article_data, f, ensure_ascii=False, indent=2)
-                    print(f"Guardado: {output_file}")
-                except Exception as e:
-                    print(f"Error al guardar {output_file}: {e}")
-            else:
-                print(f"No se encontró texto en: {url}")
-            
-            time.sleep(1)
+                    article_data, url_data, index = future.result()
+                    
+                    if article_data:
+                        scraped_data.append(article_data)
+                        
+                        safe_filename = re.sub(r'[^\w\-_.]', '_', urlparse(url).path.split('/')[-1])
+                        if not safe_filename:
+                            safe_filename = f"article_{index}"
+                            
+                        output_file = os.path.join(output_dir, f"{safe_filename}.json")
+                        
+                        try:
+                            with open(output_file, 'w', encoding='utf-8') as f:
+                                json.dump(article_data, f, ensure_ascii=False, indent=2)
+                            with self.lock:
+                                print(f"✓ Guardado: {output_file}")
+                        except Exception as e:
+                            with self.lock:
+                                print(f"Error al guardar {output_file}: {e}")
+                        
+                except Exception as exc:
+                    with self.lock:
+                        print(f"Error procesando {url}: {exc}")
+
+        print(f"\n📊 Resumen: {len(scraped_data)} artículos procesados exitosamente")
 
         consolidated_file = os.path.join(output_dir, "all_articles_with_metadata.json")
         try:
             with open(consolidated_file, 'w', encoding='utf-8') as f:
                 json.dump(scraped_data, f, ensure_ascii=False, indent=2)
-            print(f"Archivo consolidado guardado: {consolidated_file}")
+            print(f"✓ Archivo consolidado guardado: {consolidated_file}")
         except Exception as e:
             print(f"Error al guardar archivo consolidado: {e}")
         
         index_data = []
         for i, article_data in enumerate(scraped_data):
             metadata = article_data.get('source_metadata', {})
-            # for j, article in enumerate(article_data.get('articles', [])):
             index_entry = {
                 'article_id': f"{i}",
                 'url': article_data['url'],
@@ -178,7 +219,6 @@ class Scraper:
                 'section': article_data['section'],
                 'tags': article_data['tags'],
                 'text': article_data['text'],
-                # 'article_number': article['article_number'],
                 'original_json_file': metadata.get('json_file'),
                 'message_index': metadata.get('message_index'),
                 'message_id': metadata.get('message_id'),
@@ -195,7 +235,7 @@ class Scraper:
         try:
             with open(index_file, 'w', encoding='utf-8') as f:
                 json.dump(index_data, f, ensure_ascii=False, indent=2)
-            print(f"Índice de artículos guardado: {index_file}")
+            print(f"✓ Índice de artículos guardado: {index_file}")
         except Exception as e:
             print(f"Error al guardar índice: {e}")
         
