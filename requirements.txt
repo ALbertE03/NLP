@@ -15,3 +15,5 @@ Telethon==1.41.2
 tqdm==4.67.1
 typing_extensions==4.15.0
 urllib3==2.5.0
+
+Q7kGnv*VjAXM]R;b
