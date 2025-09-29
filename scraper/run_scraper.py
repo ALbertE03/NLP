@@ -3,7 +3,7 @@ from scraper import Scraper
 
 def main():
     json_file_path = "Data/teleSUR_tv"
-    max_workers = 8
+    max_workers = 10
     scraper = Scraper(max_workers=max_workers)
     
     output_dir = "Data_articles"
