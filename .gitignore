@@ -5,6 +5,8 @@ __pycache__/
 Data/
 # C extensions
 *.so
+*.md
+*.zip
 *.session
 # Distribution / packaging
 /Data_articles/
