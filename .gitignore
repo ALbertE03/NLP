@@ -5,6 +5,7 @@ __pycache__/
 Data/
 # C extensions
 *.so
+.vscode/
 *.md
 *.zip
 *.session
